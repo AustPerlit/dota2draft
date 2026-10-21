@@ -18,6 +18,8 @@ parts = {
     '/*HEROES*/': json.dumps(heroes, ensure_ascii=False),
     '<!--STATS-->': stats,
     '/*SCORING*/': (src / 'scoring.js').read_text(encoding='utf-8'),
+    '/*ABILITIES*/': (src / 'abilities.json').read_text(encoding='utf-8'),
+    '/*ABILITY_ANALYSIS*/': (src / 'abilities.js').read_text(encoding='utf-8'),
     '/*DATA*/': (src / 'data.js').read_text(encoding='utf-8'),
     '/*APP*/': (src / 'app.js').read_text(encoding='utf-8'),
 }

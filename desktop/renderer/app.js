@@ -366,12 +366,45 @@ function heroBadge(id, base) {
   return box;
 }
 
+function noteList(title, items, empty) {
+  const box = el('div', 'cmp-notes');
+  box.append(el('h5', '', title));
+  const ul = el('ul');
+  if (!items.length) ul.append(el('li', 'muted', empty));
+  for (const t of items) ul.append(el('li', '', t));
+  box.append(ul);
+  return box;
+}
+
+// Ability-by-ability breakdown; works without match statistics.
+function abilitySections(a, b) {
+  const sec = el('section', 'cmp-section cmp-abilities');
+  const r = window.AbilityAnalysis && window.ABILITIES ? AbilityAnalysis.analyzePair(window.ABILITIES, state.heroes, a, b) : null;
+  sec.append(el('h4', '', 'Разбор по способностям'));
+  if (!r) {
+    sec.append(el('p', 'muted', 'Нет данных о способностях этих героев.'));
+    return sec;
+  }
+  const na = heroName(a);
+  const nb = heroName(b);
+  sec.append(
+    noteList(`Чем ${na} опасен для ${nb}`, r.aOverB, 'Явных преимуществ по способностям не найдено.'),
+    noteList(`Чем ${nb} опасен для ${na}`, r.bOverA, 'Явных преимуществ по способностям не найдено.'),
+    noteList('В одной команде', r.together, 'Особых связок способностей не найдено.'),
+    noteList('На одной линии', r.lane, 'Особых связок для линии не найдено.')
+  );
+  const abl = el('p', 'detail');
+  abl.textContent = `Способности ${na}: ${r.abilitiesA.join(', ')}. Способности ${nb}: ${r.abilitiesB.join(', ')}.`;
+  sec.append(abl, el('p', 'hint', 'Разбор составлен автоматически по описаниям способностей и может что-то упускать: таланты, аганим и предметы не учитываются.'));
+  return sec;
+}
+
 function openCompare(a, b) {
   const body = $('#compare-body');
   body.replaceChildren();
   const d = state.dataset;
   if (!d) {
-    body.append(el('p', 'muted', 'Нужна статистика: нажмите ⟳.'));
+    body.append(el('p', 'muted', 'Статистика матчей ещё не загружена: нажмите ⟳.'), abilitySections(a, b));
     $('#compare').showModal();
     return;
   }
@@ -406,7 +439,8 @@ function openCompare(a, b) {
       r.laneRaw ? [`линия выиграна ${wr(r.laneRaw.won)}`, `проиграна ${wr(r.laneRaw.lost)}`, games(r.laneRaw.games)] : []
     )
   );
-  body.append(el('p', 'hint', 'Проценты показывают, насколько результат лучше или хуже ожидаемого по общим винрейтам героев. Описание построено по статистике матчей, а не по способностям героев.'));
+  body.append(el('p', 'hint', 'Проценты показывают, насколько результат лучше или хуже ожидаемого по общим винрейтам героев.'));
+  body.append(abilitySections(a, b));
   $('#compare').showModal();
 }
 
