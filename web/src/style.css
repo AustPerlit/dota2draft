@@ -162,3 +162,14 @@ dialog input[type=range] { width: 100%; }
   .side { order: 3; }
   .grid { max-height: 50vh; overflow: auto; }
 }
+
+#compare { width: min(520px, calc(100vw - 32px)); }
+.cmp-heroes { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; margin-bottom: 8px; }
+.cmp-hero { display: grid; gap: 2px; justify-items: center; text-align: center; min-width: 0; }
+.cmp-hero img { width: 100%; max-width: 160px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 4px; background: var(--panel-2); }
+.cmp-section { border-top: 1px solid var(--line); padding: 8px 0; }
+.cmp-section p { margin: 4px 0; }
+.cmp-section .detail { color: var(--muted); font-size: 12px; }
+.cmp-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.cmp-head h4 { margin: 0; }
+#compare-banner button { margin-left: 8px; padding: 2px 8px; }

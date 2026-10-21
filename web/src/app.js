@@ -30,6 +30,7 @@ const state = {
   draft: { allies: [], enemies: [], bans: [] },
   target: 'allies',
   focusHero: null,
+  compareFrom: null,
   search: '',
   role: '',
   settings: null,
@@ -72,6 +73,7 @@ function allTaken() {
 }
 
 function addToDraft(id, target = state.target) {
+  if (finishCompare(id)) return;
   if (allTaken().has(id)) return;
   const list = state.draft[target];
   if (list.length >= SLOTS[target]) return;
@@ -138,8 +140,9 @@ function renderGrid() {
     else if (state.draft.enemies.includes(h.id)) c.classList.add('enemy');
     else if (taken.has(h.id)) c.classList.add('taken');
     c.append(el('span', '', h.localized));
-    c.onclick = () => {
-      addToDraft(h.id);
+    c.onclick = (e) => {
+      if (e.shiftKey && !state.compareFrom) startCompare(h.id);
+      else addToDraft(h.id);
       clearSearch();
     };
     c.oncontextmenu = (e) => {
@@ -209,6 +212,7 @@ function renderSuggestions() {
 }
 
 function openHero(id) {
+  if (finishCompare(id)) return;
   state.focusHero = id;
   switchTab('hero');
   renderHeroCard();
@@ -239,7 +243,9 @@ function renderHeroCard() {
     b.onclick = () => addToDraft(id, target);
     actions.append(b);
   }
-  card.append(head, actions);
+  const cmp = el('button', 'wide', '⇄ Сравнить с другим героем');
+  cmp.onclick = () => startCompare(id);
+  card.append(head, actions, cmp);
 
   if (!state.dataset) {
     card.append(el('p', 'muted', 'Нет статистики: нажмите ⟳.'));
@@ -271,6 +277,125 @@ function render() {
   renderGrid();
   renderSuggestions();
   renderHeroCard();
+}
+
+// ---------- comparing two heroes ----------
+
+function startCompare(id) {
+  state.compareFrom = id;
+  $('#compare-hero').textContent = heroName(id);
+  $('#compare-banner').classList.remove('hidden');
+  $('#search').focus();
+}
+
+function cancelCompare() {
+  state.compareFrom = null;
+  $('#compare-banner').classList.add('hidden');
+}
+
+// In comparison mode the next chosen hero opens the comparison instead of
+// its usual action. Returns true when it did.
+function finishCompare(id) {
+  const from = state.compareFrom;
+  if (!from || from === id) return false;
+  cancelCompare();
+  openCompare(from, id);
+  return true;
+}
+
+function strength(v) {
+  const a = Math.abs(v);
+  return a < 0.03 ? 'немного' : a < 0.06 ? 'заметно' : 'сильно';
+}
+
+const NEUTRAL = 0.01;
+
+function versusText(v, a, b) {
+  if (!v) return 'Нет данных о матчах друг против друга.';
+  if (Math.abs(v.value) < NEUTRAL) return 'Примерно на равных: ни один не контрит другого.';
+  const [win, lose] = v.value > 0 ? [a, b] : [b, a];
+  return `${heroName(win)} ${strength(v.value)} контрит ${heroName(lose)}.`;
+}
+
+function togetherText(v) {
+  if (Math.abs(v.value) < NEUTRAL) return 'Нейтральная пара: вместе играют так, как и ожидается по их винрейтам.';
+  return v.value > 0
+    ? `Хорошо сочетаются: вместе выигрывают ${strength(v.value)} чаще ожидаемого.`
+    : `Плохо сочетаются: вместе выигрывают ${strength(v.value)} реже ожидаемого.`;
+}
+
+function laneText(v) {
+  if (Math.abs(v.value) < NEUTRAL) return 'На общей линии выступают средне.';
+  return v.value > 0
+    ? `Сильная пара на линии: ${strength(v.value)} чаще выигрывают линию, чем проигрывают.`
+    : `Слабая пара на линии: ${strength(v.value)} чаще проигрывают линию.`;
+}
+
+const wr = (x) => `${(x * 100).toFixed(1)}%`;
+const games = (n) => `${n.toLocaleString('ru-RU')} игр`;
+
+function compareSection(title, score, text, facts) {
+  const sec = el('section', 'cmp-section');
+  const head = el('div', 'cmp-head');
+  head.append(el('h4', '', title));
+  if (score) head.append(el('span', `score ${score.value >= 0 ? 'pos' : 'neg'}`, pct(score.value)));
+  sec.append(head, el('p', '', text));
+  if (facts.length) sec.append(el('p', 'detail', facts.join(' · ')));
+  return sec;
+}
+
+function heroBadge(id, base) {
+  const box = el('div', 'cmp-hero');
+  const img = el('img');
+  img.src = imgUrl(state.heroes[id]);
+  img.alt = '';
+  img.onerror = () => (img.style.visibility = 'hidden');
+  box.append(img, el('strong', '', heroName(id)), el('span', 'muted', `винрейт ${wr(base)}`));
+  return box;
+}
+
+function openCompare(a, b) {
+  const body = $('#compare-body');
+  body.replaceChildren();
+  const d = state.dataset;
+  if (!d) {
+    body.append(el('p', 'muted', 'Нужна статистика: нажмите ⟳.'));
+    $('#compare').showModal();
+    return;
+  }
+  const r = Scoring.pairReport(d, a, b, minGames());
+
+  const heads = el('div', 'cmp-heroes');
+  const swap = el('button', '', '⇄');
+  swap.title = 'Поменять местами';
+  swap.onclick = () => openCompare(b, a);
+  heads.append(heroBadge(a, r.baseA), swap, heroBadge(b, r.baseB));
+  body.append(heads);
+
+  const vsFacts = [];
+  if (r.versusRaw) vsFacts.push(`${heroName(a)} выигрывает ${wr(r.versusRaw.winrate)} матчей против ${heroName(b)}`, games(r.versusRaw.games));
+  body.append(compareSection('Друг против друга', r.versus, versusText(r.versus, a, b), vsFacts));
+
+  const noStratz = 'Нужен токен STRATZ (⚙), чтобы увидеть эти данные.';
+  const lowData = 'Мало совместных матчей, чтобы делать выводы.';
+  body.append(
+    compareSection(
+      'В одной команде',
+      r.together,
+      !d.with ? noStratz : r.together ? togetherText(r.together) : lowData,
+      r.togetherRaw ? [`вместе выигрывают ${wr(r.togetherRaw.winrate)}`, games(r.togetherRaw.games)] : []
+    )
+  );
+  body.append(
+    compareSection(
+      'На одной линии',
+      r.lane,
+      !d.lane ? noStratz : r.lane ? laneText(r.lane) : lowData,
+      r.laneRaw ? [`линия выиграна ${wr(r.laneRaw.won)}`, `проиграна ${wr(r.laneRaw.lost)}`, games(r.laneRaw.games)] : []
+    )
+  );
+  body.append(el('p', 'hint', 'Проценты показывают, насколько результат лучше или хуже ожидаемого по общим винрейтам героев. Описание построено по статистике матчей, а не по способностям героев.'));
+  $('#compare').showModal();
 }
 
 // ---------- data ----------
@@ -356,6 +481,8 @@ async function init() {
     render();
   };
   $('#s-save').onclick = saveSettings;
+  $('#compare-cancel').onclick = cancelCompare;
+  $('#compare-close').onclick = () => $('#compare').close();
   sel.onchange = changeBracket;
   $('#role').onchange = (e) => {
     state.role = e.target.value;
@@ -376,6 +503,7 @@ async function init() {
       clearSearch();
       e.preventDefault();
     } else if (e.key === 'Escape') {
+      if (state.compareFrom) cancelCompare();
       clearSearch();
     }
   };

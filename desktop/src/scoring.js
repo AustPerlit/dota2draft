@@ -121,7 +121,33 @@
     return suggestPicks(data, { allies: enemies, enemies: allies, bans, limit, minGames });
   }
 
-  const api = { baseWinrate, advantage, synergy, laneSynergy, heroProfile, suggestPicks, suggestBans, SHRINK };
+  // Everything known about one pair of heroes, for the comparison window.
+  // Raw win rates are from a's point of view; null where there is no data.
+  function pairReport(data, a, b, minGames = 0) {
+    const raw = (table, x, y) => {
+      const r = rec(table, x, y) || rec(table, y, x);
+      return r && r.games >= minGames ? r : null;
+    };
+    const ab = rec(data.vs, a, b);
+    const ba = rec(data.vs, b, a);
+    let head = null;
+    if (ab && ab.games >= minGames) head = { games: ab.games, winrate: ab.wins / ab.games };
+    else if (ba && ba.games >= minGames) head = { games: ba.games, winrate: 1 - ba.wins / ba.games };
+    const team = raw(data.with, a, b);
+    const lane = raw(data.lane, a, b);
+    return {
+      baseA: baseWinrate(data, a),
+      baseB: baseWinrate(data, b),
+      versus: advantage(data, a, b, minGames),
+      versusRaw: head,
+      together: synergy(data, a, b, minGames),
+      togetherRaw: team ? { games: team.games, winrate: team.wins / team.games } : null,
+      lane: laneSynergy(data, a, b, minGames),
+      laneRaw: lane ? { games: lane.games, won: lane.wins / lane.games, lost: (lane.losses || 0) / lane.games } : null,
+    };
+  }
+
+  const api = { baseWinrate, advantage, synergy, laneSynergy, heroProfile, suggestPicks, suggestBans, pairReport, SHRINK };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Scoring = api;
 })(typeof window !== 'undefined' ? window : globalThis);

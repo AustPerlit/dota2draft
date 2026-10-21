@@ -12,6 +12,7 @@
 </header>
 
 <div id="warning" class="banner warn hidden"></div>
+<div id="compare-banner" class="banner hidden">Сравнение с <strong id="compare-hero"></strong>: выберите второго героя. <button id="compare-cancel">Отмена</button></div>
 
 <main class="layout">
   <section class="board">
@@ -27,7 +28,7 @@
     <h3>Баны</h3>
     <div id="slots-bans" class="slots bans"></div>
     <button id="btn-reset" class="wide">Очистить драфт</button>
-    <p class="hint">Клик по герою добавляет его в выбранную группу, правый клик открывает карточку. Клик по слоту убирает героя. В поиске Enter добавляет первого найденного, Tab переключает группу.</p>
+    <p class="hint">Клик по герою добавляет его в выбранную группу, правый клик открывает карточку. Клик по слоту убирает героя. В поиске Enter добавляет первого найденного, Tab переключает группу. Shift+клик по двум героям открывает их сравнение.</p>
   </section>
 
   <section class="pool">
@@ -75,6 +76,11 @@
       <button id="s-save" value="default" class="primary">Сохранить</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="compare" aria-label="Сравнение героев">
+  <div id="compare-body"></div>
+  <div class="row end"><button id="compare-close" class="primary">Закрыть</button></div>
 </dialog>
 
 <script>window.HERO_LIST = /*HEROES*/;</script>

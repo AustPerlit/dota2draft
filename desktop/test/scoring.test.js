@@ -54,3 +54,16 @@ test('missing tables do not break the profile', () => {
   assert.deepStrictEqual(p.teammates, []);
   assert.deepStrictEqual(p.lanePartners, []);
 });
+
+test('pair report describes both directions and teamwork', () => {
+  const d = dataset();
+  const r = S.pairReport(d, 1, 2);
+  assert.ok(r.versus.value > 0.05);
+  assert.strictEqual(r.versusRaw.winrate, 0.6);
+  assert.ok(S.pairReport(d, 2, 1).versus.value < -0.05);
+  assert.strictEqual(S.pairReport(d, 2, 1).versusRaw.winrate, 0.4);
+  assert.ok(S.pairReport(d, 3, 4).together.value > 0.05);
+  assert.ok(S.pairReport(d, 5, 6).lane.value > 0.05);
+  d.with = null;
+  assert.strictEqual(S.pairReport(d, 3, 4).together, null);
+});
