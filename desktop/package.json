@@ -1,0 +1,31 @@
+{
+  "name": "dota2-draft-overlay",
+  "version": "0.1.0",
+  "description": "Оверлей для драфта Dota 2: напарники на линии, синергия, контрпики",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.js",
+    "dist:win": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "44.9.2",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "local.dota2.draft-overlay",
+    "productName": "Dota2 Draft Helper",
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**",
+      "renderer/**",
+      "data/**"
+    ],
+    "win": {
+      "target": "portable",
+      "signAndEditExecutable": false
+    }
+  }
+}

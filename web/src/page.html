@@ -1,0 +1,90 @@
+<title>Dota 2 Draft Helper</title>
+<style>
+/*STYLE*/
+</style>
+<header class="titlebar">
+  <div class="brand">Dota 2 Draft Helper</div>
+  <div id="status" class="status">Загрузка…</div>
+  <div class="spacer"></div>
+  <select id="bracket" title="Ранг" aria-label="Ранг"></select>
+  <button id="btn-refresh" title="Обновить статистику" aria-label="Обновить статистику">⟳</button>
+  <button id="btn-settings" title="Настройки" aria-label="Настройки">⚙</button>
+</header>
+
+<div id="warning" class="banner warn hidden"></div>
+
+<main class="layout">
+  <section class="board">
+    <div class="target-switch" role="radiogroup" aria-label="Куда добавлять героя">
+      <button data-target="allies" class="active">Мы</button>
+      <button data-target="enemies">Враги</button>
+      <button data-target="bans">Бан</button>
+    </div>
+    <h3>Наша команда</h3>
+    <div id="slots-allies" class="slots"></div>
+    <h3>Противники</h3>
+    <div id="slots-enemies" class="slots"></div>
+    <h3>Баны</h3>
+    <div id="slots-bans" class="slots bans"></div>
+    <button id="btn-reset" class="wide">Очистить драфт</button>
+    <p class="hint">Клик по герою добавляет его в выбранную группу, правый клик открывает карточку. Клик по слоту убирает героя. В поиске Enter добавляет первого найденного, Tab переключает группу.</p>
+  </section>
+
+  <section class="pool">
+    <input id="search" type="search" placeholder="Поиск героя…" autocomplete="off" aria-label="Поиск героя">
+    <div id="grid" class="grid"></div>
+  </section>
+
+  <section class="side">
+    <nav class="tabs">
+      <button data-tab="suggest" class="active">Подсказки</button>
+      <button data-tab="hero">Герой</button>
+    </nav>
+    <div id="tab-suggest" class="tab">
+      <div class="row">
+        <label>Роль
+          <select id="role">
+            <option value="">любая</option>
+            <option>Carry</option><option>Support</option><option>Nuker</option>
+            <option>Disabler</option><option>Initiator</option><option>Durable</option>
+            <option>Escape</option><option>Pusher</option>
+          </select>
+        </label>
+      </div>
+      <h4>Кого взять</h4>
+      <ol id="picks" class="list"></ol>
+      <h4>Кого забанить</h4>
+      <ol id="bans-suggest" class="list"></ol>
+    </div>
+    <div id="tab-hero" class="tab hidden">
+      <div id="hero-card" class="hero-card"><p class="muted">Откройте карточку героя правым кликом.</p></div>
+    </div>
+  </section>
+</main>
+
+<dialog id="settings">
+  <form method="dialog">
+    <h3>Настройки</h3>
+    <label>Токен STRATZ API
+      <input id="s-token" type="password" placeholder="нужен для синергии и линий">
+    </label>
+    <p class="hint">Бесплатный токен: войдите через Steam на <a href="https://stratz.com/api" target="_blank" rel="noopener">stratz.com/api</a>. Без токена работают только контрпики из OpenDota. Токен хранится только в вашем браузере.</p>
+    <p id="s-error" class="error"></p>
+    <div class="row end">
+      <button value="cancel">Отмена</button>
+      <button id="s-save" value="default" class="primary">Сохранить</button>
+    </div>
+  </form>
+</dialog>
+
+<script>window.HERO_LIST = /*HEROES*/;</script>
+<!--STATS-->
+<script>
+/*SCORING*/
+</script>
+<script>
+/*DATA*/
+</script>
+<script>
+/*APP*/
+</script>

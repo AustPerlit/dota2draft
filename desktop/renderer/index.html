@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' data: https://cdn.cloudflare.steamstatic.com https://cdn.steamstatic.com; style-src 'self'; script-src 'self'">
+  <title>Dota 2 Draft Helper</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="titlebar">
+    <div class="brand">Draft Helper</div>
+    <div id="status" class="status">Загрузка…</div>
+    <div class="spacer"></div>
+    <select id="bracket" class="no-drag" title="Ранг"></select>
+    <button id="btn-refresh" class="no-drag" title="Обновить статистику">⟳</button>
+    <button id="btn-settings" class="no-drag" title="Настройки">⚙</button>
+    <button id="btn-hide" class="no-drag" title="Скрыть (горячая клавиша вернёт окно)">—</button>
+    <button id="btn-quit" class="no-drag danger" title="Выйти">✕</button>
+  </header>
+
+  <div id="ct-banner" class="banner hidden">Режим «сквозь окно»: клики проходят в игру. Нажмите горячую клавишу, чтобы вернуть управление.</div>
+  <div id="warning" class="banner warn hidden"></div>
+
+  <main class="layout">
+    <section class="board">
+      <div class="target-switch" role="radiogroup">
+        <button data-target="allies" class="active">Мы</button>
+        <button data-target="enemies">Враги</button>
+        <button data-target="bans">Бан</button>
+      </div>
+      <h3>Наша команда</h3>
+      <div id="slots-allies" class="slots"></div>
+      <h3>Противники</h3>
+      <div id="slots-enemies" class="slots"></div>
+      <h3>Баны</h3>
+      <div id="slots-bans" class="slots bans"></div>
+      <button id="btn-reset" class="wide">Очистить драфт</button>
+      <p class="hint">Клик по герою добавляет его в выбранную группу, правый клик открывает карточку. Клик по слоту убирает героя. В поиске Enter добавляет первого найденного.</p>
+    </section>
+
+    <section class="pool">
+      <input id="search" type="search" placeholder="Поиск героя…" autocomplete="off">
+      <div id="grid" class="grid"></div>
+    </section>
+
+    <section class="side">
+      <nav class="tabs">
+        <button data-tab="suggest" class="active">Подсказки</button>
+        <button data-tab="hero">Герой</button>
+      </nav>
+      <div id="tab-suggest" class="tab">
+        <div class="row">
+          <label>Роль
+            <select id="role">
+              <option value="">любая</option>
+              <option>Carry</option><option>Support</option><option>Nuker</option>
+              <option>Disabler</option><option>Initiator</option><option>Durable</option>
+              <option>Escape</option><option>Pusher</option>
+            </select>
+          </label>
+        </div>
+        <h4>Кого взять</h4>
+        <ol id="picks" class="list"></ol>
+        <h4>Кого забанить</h4>
+        <ol id="bans-suggest" class="list"></ol>
+      </div>
+      <div id="tab-hero" class="tab hidden">
+        <div id="hero-card" class="hero-card"><p class="muted">Выберите героя правым кликом.</p></div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="settings">
+    <form method="dialog">
+      <h3>Настройки</h3>
+      <label>Токен STRATZ API
+        <input id="s-token" type="password" placeholder="нужен для синергии и линий">
+      </label>
+      <p class="hint">Бесплатный токен: войдите через Steam на <a href="https://stratz.com/api" target="_blank">stratz.com/api</a>. Без токена работают только контрпики из OpenDota.</p>
+      <label>Показать/скрыть окно <input id="s-hk-toggle"></label>
+      <label>Клики сквозь окно <input id="s-hk-ct"></label>
+      <label>Прозрачность <input id="s-opacity" type="range" min="0.4" max="1" step="0.02"></label>
+      <p id="s-error" class="error"></p>
+      <div class="row end">
+        <button value="cancel">Отмена</button>
+        <button id="s-save" value="default" class="primary">Сохранить</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="../src/scoring.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
