@@ -1,12 +1,16 @@
 /* global Scoring, DraftData, state, $, el, imgUrl, heroName, pct, minGames, ATTRIBUTES */
-// Draft challenge mini-game. Twelve random bans, then an ally picks at random,
-// the player fills four slots and the opponent counter-picks while covering the
-// five standard positions. At the end both sides place their heroes on the
-// minimap, and the draft and the lanes are scored from match statistics.
+// Draft challenge mini-game. Twelve random bans, then an ally picks at random
+// (or the player, if that option is off), the player fills the other slots and
+// the opponent counter-picks while covering the five standard positions. In the
+// last-pick mode both teams start with four heroes and the player picks the
+// fifth. At the end both sides place their heroes on the minimap, and the draft
+// and the lanes are scored from match statistics.
 
-// Order of picks. 'random' and 'enemy' steps happen on their own, 'player' steps wait for clicks.
-const GAME_STEPS = [
-  { side: 'allies', who: 'random', n: 1, text: 'Союзник выбирает случайного героя' },
+// Order of picks in the full draft. 'random', 'enemy' and 'preset' steps happen
+// on their own, 'player' steps wait for clicks.
+const FIRST_RANDOM = { side: 'allies', who: 'random', n: 1, text: 'Союзник выбирает случайного героя' };
+const FIRST_PLAYER = { side: 'allies', who: 'player', n: 1, text: 'Ваш ход: выберите первого героя' };
+const FULL_STEPS = [
   { side: 'allies', who: 'player', n: 1, text: 'Ваш ход: выберите героя' },
   { side: 'enemies', who: 'enemy', n: 2, text: 'Соперник выбирает двух героев' },
   { side: 'allies', who: 'player', n: 2, text: 'Ваш ход: выберите двух героев' },
@@ -14,6 +18,12 @@ const GAME_STEPS = [
   { side: 'allies', who: 'player', n: 1, text: 'Последний ход: выберите заключительного героя' },
   { side: 'enemies', who: 'enemy', n: 1, text: 'Соперник делает последний выбор' },
 ];
+const LAST_PICK_STEPS = [
+  { side: 'allies', who: 'preset', n: 4, text: 'Собираем вашу команду' },
+  { side: 'enemies', who: 'preset', n: 4, text: 'Собираем команду соперника' },
+  { side: 'allies', who: 'player', n: 1, text: 'Ваш ластпик: выберите пятого героя' },
+];
+const GAME_OPTIONS_KEY = 'd2draft-game-options';
 const BAN_COUNT = 12;
 const GAME_RECORD_KEY = 'd2draft-game-record';
 const PICK_DELAY_MS = 700;
@@ -31,11 +41,15 @@ const OFF_ROLE_PENALTY = 0.02;
 
 const game = {
   open: false,
+  mode: 'full', // full | lastpick
+  randomFirst: true,
+  steps: [],
   phase: 'idle', // idle | bans | draft | lanes | done
   bans: [],
   allies: [],
   enemies: [],
-  enemyPos: {}, // enemy hero id -> position 1..5
+  enemyPos: {}, // enemy hero id -> position 1..5, shown only after the lanes
+  allyPos: {}, // positions of preset allies in the last-pick mode
   lanes: {}, // ally hero id -> top | mid | bot
   enemyLanes: {},
   selected: null,
@@ -63,6 +77,20 @@ function freeHeroes() {
 function randomFree() {
   const free = freeHeroes();
   return free[Math.floor(Math.random() * free.length)];
+}
+
+// A random hero for one of the side's still-open positions (used to set up the
+// last-pick mode, where both teams already have four heroes).
+function presetPick(side) {
+  const used = new Set(side === 'enemies' ? Object.values(game.enemyPos) : Object.values(game.allyPos));
+  const options = [];
+  for (const id of freeHeroes()) {
+    const pos = positionsOf(id).find((p) => !used.has(p));
+    if (pos) options.push({ id, pos });
+  }
+  const choice = options[Math.floor(Math.random() * options.length)];
+  game[side].push(choice.id);
+  (side === 'enemies' ? game.enemyPos : game.allyPos)[choice.id] = choice.pos;
 }
 
 function openEnemyPositions() {
@@ -118,9 +146,11 @@ async function startGame() {
     allies: [],
     enemies: [],
     enemyPos: {},
+    allyPos: {},
     lanes: {},
     enemyLanes: {},
     selected: null,
+    steps: game.mode === 'lastpick' ? LAST_PICK_STEPS : [game.randomFirst ? FIRST_RANDOM : FIRST_PLAYER, ...FULL_STEPS],
     step: -1,
     left: 0,
     picks: [],
@@ -144,27 +174,28 @@ async function startGame() {
 // Plays automatic steps until the player has to choose, or the draft is over.
 async function runSteps() {
   game.busy = true;
-  while (game.step < GAME_STEPS.length && GAME_STEPS[game.step].who !== 'player') {
-    const s = GAME_STEPS[game.step];
+  while (game.step < game.steps.length && game.steps[game.step].who !== 'player') {
+    const s = game.steps[game.step];
     renderGame();
     for (let i = 0; i < s.n; i++) {
-      await sleep(PICK_DELAY_MS);
+      await sleep(s.who === 'preset' ? PICK_DELAY_MS / 3 : PICK_DELAY_MS);
       if (s.who === 'enemy') enemyPick();
+      else if (s.who === 'preset') presetPick(s.side);
       else game[s.side].push(randomFree());
       renderGame();
     }
     game.step++;
   }
   game.busy = false;
-  if (game.step >= GAME_STEPS.length) {
+  if (game.step >= game.steps.length) {
     game.phase = 'lanes';
     game.selected = game.allies[0];
-  } else game.left = GAME_STEPS[game.step].n;
+  } else game.left = game.steps[game.step].n;
   renderGame();
 }
 
 function playerPick(id) {
-  const s = GAME_STEPS[game.step];
+  const s = game.steps[game.step];
   if (game.busy || !s || s.who !== 'player' || gameTaken().has(id)) return;
   // Rate the pick against what was known at that moment.
   const options = Scoring.suggestPicks(state.dataset, {
@@ -323,8 +354,11 @@ function verdict(p) {
   return 'Слабый драфт';
 }
 
+// Each mode keeps its own record: last-pick scores are not comparable with full drafts.
+const recordKey = () => (game.mode === 'lastpick' ? `${GAME_RECORD_KEY}-lastpick` : GAME_RECORD_KEY);
+
 function readRecord() {
-  return DraftData.store.get(GAME_RECORD_KEY);
+  return DraftData.store.get(recordKey());
 }
 
 function finishGame() {
@@ -334,7 +368,7 @@ function finishGame() {
   const score = points(draft.total + laneTotal);
   const record = readRecord();
   const isRecord = record === null || score > record;
-  if (isRecord) DraftData.store.set(GAME_RECORD_KEY, score);
+  if (isRecord) DraftData.store.set(recordKey(), score);
   game.phase = 'done';
   game.result = { ...draft, lanes, laneTotal, score, record: isRecord ? score : record, isRecord };
 }
@@ -351,7 +385,8 @@ function gameTeam(side, title) {
     if (id) {
       s.classList.add('filled', 'game-slot');
       s.style.backgroundImage = `url(${imgUrl(state.heroes[id])})`;
-      const pos = side === 'enemies' ? ` · ${POSITION_NAMES[game.enemyPos[id]]}` : '';
+      // The opponent's positions stay hidden until both teams are on the minimap.
+      const pos = side === 'enemies' && game.phase === 'done' ? ` · ${POSITION_NAMES[game.enemyPos[id]]}` : '';
       s.append(el('span', '', heroName(id) + pos));
       s.title = heroName(id) + pos;
     }
@@ -440,14 +475,15 @@ function gameResults() {
     img.onerror = () => (img.style.visibility = 'hidden');
     const text = el('div');
     const mine = game.picks.some((p) => p.id === h.id);
-    text.append(el('div', '', `${heroName(h.id)}${mine ? '' : ' (случайный союзник)'}`));
+    const note = mine ? '' : game.mode === 'lastpick' ? ' (уже был в команде)' : ' (случайный союзник)';
+    text.append(el('div', '', `${heroName(h.id)}${note}`));
     text.append(el('div', 'detail', `против врагов ${pct(h.vs)} · с союзниками ${pct(h.team)}`));
     li.append(img, text, el('div', `score ${h.vs + h.team >= 0 ? 'pos' : 'neg'}`, signed(points(h.vs + h.team))));
     ol.append(li);
   }
   box.append(ol);
 
-  box.append(el('h4', '', 'Ваши пики'));
+  box.append(el('h4', '', game.mode === 'lastpick' ? 'Ваш ластпик' : 'Ваши пики'));
   const ul = el('ul', 'game-picks');
   for (const p of game.picks) {
     const text =
@@ -458,10 +494,12 @@ function gameResults() {
   }
   box.append(ul);
 
-  box.append(el('h4', '', 'Пики соперника'));
-  const en = el('ul', 'game-picks');
-  for (const n of game.enemyNotes) en.append(el('li', '', n.text));
-  box.append(en);
+  if (game.enemyNotes.length) {
+    box.append(el('h4', '', 'Пики соперника'));
+    const en = el('ul', 'game-picks');
+    for (const n of game.enemyNotes) en.append(el('li', '', n.text));
+    box.append(en);
+  }
 
   if (!state.dataset.with)
     box.append(el('p', 'hint', 'Синергия союзников не учтена: для неё нужен токен STRATZ (⚙). Сейчас очки считаются только по контрпикам.'));
@@ -475,23 +513,65 @@ function gameResults() {
   return box;
 }
 
+function saveOptions() {
+  DraftData.store.set(GAME_OPTIONS_KEY, { mode: game.mode, randomFirst: game.randomFirst });
+}
+
+function gameOptions() {
+  const box = el('div', 'game-options');
+  const modes = el('div', 'target-switch game-modes');
+  modes.setAttribute('role', 'group');
+  modes.setAttribute('aria-label', 'Режим игры');
+  for (const [key, label] of [['full', 'Полный драфт'], ['lastpick', 'Ластпик']]) {
+    const b = el('button', game.mode === key ? 'active' : '', label);
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(game.mode === key));
+    b.onclick = () => {
+      game.mode = key;
+      saveOptions();
+      renderGame();
+    };
+    modes.append(b);
+  }
+  box.append(modes);
+  if (game.mode === 'full') {
+    const label = el('label', 'game-check');
+    const cb = el('input');
+    cb.type = 'checkbox';
+    cb.id = 'game-random-first';
+    cb.checked = game.randomFirst;
+    cb.onchange = () => {
+      game.randomFirst = cb.checked;
+      saveOptions();
+      renderGame();
+    };
+    label.append(cb, document.createTextNode(' Первого героя союзника выбирает случай'));
+    box.append(label);
+  }
+  return box;
+}
+
 function gameStatus() {
   const status = el('div', 'game-status');
-  const s = GAME_STEPS[game.step];
+  const s = game.steps[game.step];
+  if (game.phase === 'idle' || game.phase === 'done') status.append(gameOptions());
   if (game.phase === 'idle') {
     status.append(
       el(
         'p',
         '',
-        `Сначала банятся ${BAN_COUNT} случайных героев. Союзник выбирает случайного героя, вы выбираете четырёх, а соперник подбирает контрпики к вашим героям так, чтобы закрыть все пять позиций. В конце обе команды расставляют героев по линиям.`
+        game.mode === 'lastpick'
+          ? `Сначала банятся ${BAN_COUNT} случайных героев, затем в обеих командах уже стоят по 4 героя на разных позициях. Вам нужно сделать ластпик: выбрать пятого героя. В конце обе команды расставляют героев по линиям.`
+          : `Сначала банятся ${BAN_COUNT} случайных героев. ${game.randomFirst ? 'Союзник выбирает случайного героя, вы выбираете четырёх' : 'Вы выбираете всех пятерых героев'}, а соперник подбирает контрпики к вашим героям так, чтобы закрыть все пять позиций. В конце обе команды расставляют героев по линиям.`
       )
     );
   } else if (game.phase === 'bans') {
     status.append(el('p', 'game-prompt', 'Баним случайных героев…'));
   } else if (game.phase === 'draft') {
     const steps = el('ol', 'game-steps');
-    GAME_STEPS.forEach((x, i) => {
-      const label = x.who === 'player' ? `Вы ×${x.n}` : x.side === 'allies' ? 'Союзник' : `Соперник ×${x.n}`;
+    game.steps.forEach((x, i) => {
+      const team = x.side === 'allies' ? (x.who === 'preset' ? `Союзники ×${x.n}` : 'Союзник') : `Соперник ×${x.n}`;
+      const label = x.who === 'player' ? `Вы ×${x.n}` : team;
       steps.append(el('li', i < game.step ? 'done' : i === game.step ? 'now' : '', label));
     });
     status.append(steps, el('p', 'game-prompt', s.who === 'player' && s.n > 1 ? `${s.text} (осталось ${game.left})` : s.text));
@@ -523,7 +603,7 @@ function renderGame() {
     teams.append(gameTeam('allies', 'Ваша команда'), gameTeam('enemies', 'Соперник'));
     root.append(teams);
   }
-  const s = GAME_STEPS[game.step];
+  const s = game.steps[game.step];
   const choosing = game.phase === 'draft' && s && s.who === 'player';
   $('#game-search').classList.toggle('hidden', !choosing);
   if (choosing) root.append(gameGrid());
@@ -532,6 +612,9 @@ function renderGame() {
 }
 
 function initGame() {
+  const saved = DraftData.store.get(GAME_OPTIONS_KEY) || {};
+  if (saved.mode === 'full' || saved.mode === 'lastpick') game.mode = saved.mode;
+  if (typeof saved.randomFirst === 'boolean') game.randomFirst = saved.randomFirst;
   $('#btn-game').onclick = () => toggleGame();
   const search = $('#game-search');
   search.oninput = () => {

@@ -264,3 +264,8 @@ button.hero.banned:disabled { filter: grayscale(1); opacity: .15; }
 .lane-chip { display: flex; justify-content: space-between; gap: 8px; text-align: left; }
 .lane-chip.selected { border-color: var(--accent); background: rgba(224, 165, 38, .15); }
 @media (max-width: 500px) { .map-token { width: 34px; } .map-token span { display: none; } }
+
+.game-options { display: grid; gap: 8px; justify-items: start; }
+.game-modes { width: min(100%, 360px); }
+.game-modes button.active { background: var(--accent); border-color: var(--accent); color: #111; }
+.game-check { display: flex; align-items: center; gap: 6px; cursor: pointer; }
