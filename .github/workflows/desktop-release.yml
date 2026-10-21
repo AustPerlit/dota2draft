@@ -1,0 +1,46 @@
+# Builds the Windows desktop app and publishes it as a GitHub release,
+# so it can be downloaded from the Releases page in a browser.
+name: Desktop release
+
+on:
+  push:
+    branches: [main]
+    paths: ['desktop/**', '.github/workflows/desktop-release.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm test
+      - run: npx electron-builder --win portable --x64 --publish never
+      - name: Package zip
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $exe = Get-ChildItem dist -Filter *.exe | Select-Object -First 1
+          Copy-Item $exe.FullName "Dota2-Draft-Helper-$version.exe"
+          Compress-Archive "Dota2-Draft-Helper-$version.exe" "Dota2-Draft-Helper-$version-win64.zip"
+          "VERSION=$version" >> $env:GITHUB_ENV
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: Dota 2 Draft Helper ${{ env.VERSION }}
+          body: |
+            Программа для Windows: скачайте zip, распакуйте и запустите exe. Установка не нужна.
+            Сайт с теми же функциями: https://austperlit.github.io/dota2draft/
+          files: |
+            desktop/Dota2-Draft-Helper-${{ env.VERSION }}-win64.zip
+            desktop/Dota2-Draft-Helper-${{ env.VERSION }}.exe
+          make_latest: true

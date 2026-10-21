@@ -12,6 +12,7 @@
     <div class="brand">Draft Helper</div>
     <div id="status" class="status">Загрузка…</div>
     <div class="spacer"></div>
+    <button id="btn-game" class="no-drag" title="Мини-игра: соберите драфт на очки">🎲 Мини-игра</button>
     <select id="bracket" class="no-drag" title="Ранг"></select>
     <button id="btn-refresh" class="no-drag" title="Обновить статистику">⟳</button>
     <button id="btn-settings" class="no-drag" title="Настройки">⚙</button>
@@ -75,6 +76,12 @@
     </section>
   </main>
 
+  <section id="game" class="game hidden" aria-label="Мини-игра">
+    <h2>Драфт-челлендж</h2>
+    <input id="game-search" class="hidden" type="search" placeholder="Поиск героя… (Enter выбирает первого)" autocomplete="off">
+    <div id="game-body"></div>
+  </section>
+
   <dialog id="settings">
     <form method="dialog">
       <h3>Настройки</h3>
@@ -102,5 +109,6 @@
   <script src="../data/abilities-data.js"></script>
   <script src="../src/abilities.js"></script>
   <script src="app.js"></script>
+  <script src="game.js"></script>
 </body>
 </html>
