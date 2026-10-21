@@ -54,9 +54,6 @@ const LANES = {
   mid: { label: 'Мид', mine: [2], theirs: [2], hint: 'центр' },
   bot: { label: 'Нижняя линия', mine: [1, 5], theirs: [3, 4], hint: 'ваша лёгкая' },
 };
-// A hero on a lane its positions don't fit costs this much.
-const OFF_ROLE_PENALTY = 0.02;
-
 const game = {
   open: false,
   mode: 'full', // full | lastpick
@@ -354,8 +351,7 @@ function scoreDraft(d, allies, enemies) {
   return { total, heroes };
 }
 
-// Lane part: heroes against the heroes on the same lane, lane partners, and
-// heroes placed on a lane none of their positions fit.
+// Lane part: heroes against the heroes on the same lane, and lane partners.
 function scoreLanes(d) {
   const mg = minGames();
   return Object.entries(LANES).map(([key, lane]) => {
@@ -366,9 +362,8 @@ function scoreLanes(d) {
     let partners = 0;
     for (let i = 0; i < mine.length; i++)
       for (let j = i + 1; j < mine.length; j++) partners += val(Scoring.laneSynergy(d, mine[i], mine[j], mg));
-    const offRole = mine.filter((id) => !positionsOf(id).some((p) => lane.mine.includes(p)));
-    const total = matchup + partners - offRole.length * OFF_ROLE_PENALTY;
-    return { key, lane, mine, theirs, matchup, partners, offRole, total };
+    const total = matchup + partners;
+    return { key, lane, mine, theirs, matchup, partners, total };
   });
 }
 
@@ -486,7 +481,6 @@ function gameResults() {
     const theirs = l.theirs.map(heroName).join(', ') || 'никого';
     const parts = [`${l.lane.label}: ${mine} против ${theirs}, ${signed(points(l.total))}`];
     if (l.partners) parts.push(`пара на линии ${pct(l.partners)}`);
-    if (l.offRole.length) parts.push(`не на своей позиции: ${l.offRole.map(heroName).join(', ')} (−${points(OFF_ROLE_PENALTY)} за каждого)`);
     lanes.append(el('li', '', parts.join('; ') + '.'));
   }
   box.append(lanes);
@@ -533,7 +527,7 @@ function gameResults() {
     el(
       'p',
       'hint',
-      'Очки: преимущество каждого вашего героя над каждым врагом и синергия союзников (драфт), плюс противостояния на линиях, пары на линии и штраф за героя не на своей позиции (линии). 1 очко = 0,1%.'
+      'Очки: преимущество каждого вашего героя над каждым врагом и синергия союзников (драфт), плюс противостояния на линиях и пары на линии (линии). 1 очко = 0,1%.'
     )
   );
   return box;
