@@ -13,6 +13,10 @@
   --agi: #3fbf6a;
   --int: #3fa6e0;
   --all: #c58bf0;
+  --map: #1d2b1f;
+  --map-edge: #2c3d2e;
+  --river: #24425c;
+  --lane: #5b5140;
   --good: #5fd08f;
   --bad: #ef6b67;
 }
@@ -212,3 +216,37 @@ button.hero.ally:disabled, button.hero.enemy:disabled { opacity: 1; }
 .game-points.neg { color: var(--bad); }
 .game-picks { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
 @media (max-width: 700px) { .game-teams { grid-template-columns: 1fr; } }
+.game-bans h3 { margin: 12px 0 6px; }
+.ban-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.ban-chip { position: relative; width: 64px; aspect-ratio: 16 / 9; max-width: 100%; border-radius: 3px; background: var(--panel-2) center / cover no-repeat; filter: grayscale(1); opacity: .7; }
+.ban-chip span { position: absolute; left: 0; right: 0; bottom: 0; font-size: 9px; padding: 0 2px; background: rgba(0,0,0,.75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+button.hero.banned:disabled { filter: grayscale(1); opacity: .15; }
+.minimap-wrap { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; margin: 12px 0; }
+.minimap { position: relative; width: min(100%, 420px); aspect-ratio: 1; max-width: 100%; background: var(--map); border: 1px solid var(--map-edge); border-radius: 8px; overflow: hidden; }
+.map-river { position: absolute; left: -20%; top: 46%; width: 140%; height: 8%; background: var(--river); transform: rotate(45deg); opacity: .8; }
+.map-lane { position: absolute; background: var(--lane); opacity: .7; }
+.lane-top-v { left: 8%; top: 8%; width: 3%; height: 80%; }
+.lane-top-h { left: 8%; top: 8%; height: 3%; width: 80%; }
+.lane-bot-h { left: 12%; bottom: 8%; height: 3%; width: 80%; }
+.lane-bot-v { right: 8%; top: 12%; width: 3%; height: 80%; }
+.lane-mid { left: -10%; top: 48.5%; width: 120%; height: 3%; transform: rotate(-45deg); }
+.map-base { position: absolute; width: 16%; aspect-ratio: 1; border-radius: 50%; }
+.map-base.radiant { left: 2%; bottom: 2%; background: var(--ally); opacity: .6; }
+.map-base.dire { right: 2%; top: 2%; background: var(--enemy); opacity: .6; }
+.map-zone { position: absolute; width: 44%; height: 30%; display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center; padding: 4px; background: transparent; border: 2px dashed transparent; border-radius: 8px; color: var(--text); }
+.map-zone:not(:disabled) { border-color: var(--accent); background: rgba(224, 165, 38, .08); cursor: pointer; }
+.map-zone:disabled { cursor: default; opacity: 1; }
+.zone-top { left: 4%; top: 4%; }
+.zone-mid { left: 28%; top: 35%; }
+.zone-bot { right: 4%; bottom: 4%; }
+.zone-label { font-size: 11px; color: var(--text); background: rgba(0,0,0,.55); padding: 1px 6px; border-radius: 999px; }
+.zone-team { display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; min-height: 0; }
+.map-token { position: relative; width: 46px; aspect-ratio: 16 / 9; border-radius: 3px; background: var(--panel-2) center / cover no-repeat; border: 2px solid; }
+.map-token.ally { border-color: var(--ally); }
+.map-token.enemy { border-color: var(--enemy); }
+.map-token span { position: absolute; left: 0; right: 0; bottom: 0; font-size: 8px; line-height: 1.2; background: rgba(0,0,0,.75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+.lane-picker { flex: 1; min-width: 220px; display: grid; gap: 8px; align-content: start; }
+.lane-chips { display: grid; gap: 4px; }
+.lane-chip { display: flex; justify-content: space-between; gap: 8px; text-align: left; }
+.lane-chip.selected { border-color: var(--accent); background: rgba(224, 165, 38, .15); }
+@media (max-width: 500px) { .map-token { width: 34px; } .map-token span { display: none; } }

@@ -1,18 +1,20 @@
 /* global Scoring, state, $, el, imgUrl, heroName, pct, minGames, ATTRIBUTES */
-// Draft challenge mini-game: the player fills four of five slots while an ally
-// and the enemy team pick at random, then the draft is scored with the same
-// statistics the draft helper uses.
+// Draft challenge mini-game. Twelve random bans, then an ally picks at random,
+// the player fills four slots and the opponent counter-picks while covering the
+// five standard positions. At the end both sides place their heroes on the
+// minimap, and the draft and the lanes are scored from match statistics.
 
-// Order of picks. 'random' steps happen on their own, 'player' steps wait for clicks.
+// Order of picks. 'random' and 'enemy' steps happen on their own, 'player' steps wait for clicks.
 const GAME_STEPS = [
   { side: 'allies', who: 'random', n: 1, text: 'Союзник выбирает случайного героя' },
   { side: 'allies', who: 'player', n: 1, text: 'Ваш ход: выберите героя' },
-  { side: 'enemies', who: 'random', n: 2, text: 'Противники выбирают двух героев' },
+  { side: 'enemies', who: 'enemy', n: 2, text: 'Соперник выбирает двух героев' },
   { side: 'allies', who: 'player', n: 2, text: 'Ваш ход: выберите двух героев' },
-  { side: 'enemies', who: 'random', n: 2, text: 'Противники выбирают ещё двух героев' },
+  { side: 'enemies', who: 'enemy', n: 2, text: 'Соперник выбирает ещё двух героев' },
   { side: 'allies', who: 'player', n: 1, text: 'Последний ход: выберите заключительного героя' },
-  { side: 'enemies', who: 'random', n: 1, text: 'Противники делают последний выбор' },
+  { side: 'enemies', who: 'enemy', n: 1, text: 'Соперник делает последний выбор' },
 ];
+const BAN_COUNT = 12;
 const GAME_RECORD_KEY = 'd2draft-game-record';
 const recordStore = {
   get() {
@@ -30,29 +32,91 @@ const recordStore = {
     }
   },
 };
-const RANDOM_PICK_DELAY_MS = 700;
+const PICK_DELAY_MS = 700;
+const BAN_DELAY_MS = 120;
+
+const POSITION_NAMES = { 1: 'Керри', 2: 'Мидер', 3: 'Оффлейнер', 4: 'Софт-саппорт', 5: 'Фул-саппорт' };
+// You play Radiant: your safe lane is bottom, the opponent's (Dire) safe lane is top.
+const LANES = {
+  top: { label: 'Верхняя линия', mine: [3, 4], theirs: [1, 5], hint: 'ваш офлейн' },
+  mid: { label: 'Мид', mine: [2], theirs: [2], hint: 'центр' },
+  bot: { label: 'Нижняя линия', mine: [1, 5], theirs: [3, 4], hint: 'ваша лёгкая' },
+};
+// A hero on a lane its positions don't fit costs this much.
+const OFF_ROLE_PENALTY = 0.02;
 
 const game = {
   open: false,
+  phase: 'idle', // idle | bans | draft | lanes | done
+  bans: [],
   allies: [],
   enemies: [],
+  enemyPos: {}, // enemy hero id -> position 1..5
+  lanes: {}, // ally hero id -> top | mid | bot
+  enemyLanes: {},
+  selected: null,
   step: -1,
   left: 0,
   busy: false,
   search: '',
   picks: [], // player picks with the best option at that moment
+  enemyNotes: [], // why the opponent took each hero
   result: null,
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const gameTaken = () => new Set([...game.allies, ...game.enemies]);
+const gameTaken = () => new Set([...game.bans, ...game.allies, ...game.enemies]);
 const points = (v) => Math.round(v * 1000);
 const signed = (n) => `${n > 0 ? '+' : ''}${n}`;
+const positionsOf = (id) => (window.HERO_POSITIONS && window.HERO_POSITIONS[id]) || [1, 2, 3, 4, 5];
+const val = (r) => (r ? r.value : 0);
+
+function freeHeroes() {
+  const taken = gameTaken();
+  return Object.keys(state.heroes).map(Number).filter((id) => !taken.has(id));
+}
 
 function randomFree() {
-  const taken = gameTaken();
-  const free = Object.keys(state.heroes).map(Number).filter((id) => !taken.has(id));
+  const free = freeHeroes();
   return free[Math.floor(Math.random() * free.length)];
+}
+
+function openEnemyPositions() {
+  const used = new Set(Object.values(game.enemyPos));
+  return [1, 2, 3, 4, 5].filter((p) => !used.has(p));
+}
+
+// The opponent takes a hero that is strong against your picks and fits one of
+// its still-open positions, picking among the top few so games differ.
+function enemyPick() {
+  const open = openEnemyPositions();
+  const mg = minGames();
+  const options = [];
+  for (const id of freeHeroes()) {
+    const pos = positionsOf(id).find((p) => open.includes(p));
+    if (!pos) continue;
+    const counter = game.allies.reduce((s, a) => s + val(Scoring.advantage(state.dataset, id, a, mg)), 0);
+    const team = game.enemies.reduce((s, e) => s + val(Scoring.synergy(state.dataset, id, e, mg)), 0);
+    // Prefer heroes for whom the open position is their main one.
+    const main = positionsOf(id)[0] === pos ? 0.005 : 0;
+    options.push({ id, pos, counter, score: counter + team / 2 + main });
+  }
+  options.sort((a, b) => b.score - a.score);
+  const top = options.slice(0, 3);
+  const choice = top[Math.floor(Math.random() * top.length)];
+  game.enemies.push(choice.id);
+  game.enemyPos[choice.id] = choice.pos;
+  const best = game.allies
+    .map((a) => ({ a, v: val(Scoring.advantage(state.dataset, choice.id, a, mg)) }))
+    .sort((x, y) => y.v - x.v)[0];
+  game.enemyNotes.push({
+    id: choice.id,
+    pos: choice.pos,
+    text:
+      best && best.v > 0
+        ? `${heroName(choice.id)} (${POSITION_NAMES[choice.pos]}): сильнее всего против ${heroName(best.a)} (${pct(best.v)}).`
+        : `${heroName(choice.id)} (${POSITION_NAMES[choice.pos]}): закрывает позицию.`,
+  });
 }
 
 function toggleGame(open = !game.open) {
@@ -60,31 +124,58 @@ function toggleGame(open = !game.open) {
   $('.layout').classList.toggle('hidden', open);
   $('#game').classList.toggle('hidden', !open);
   $('#btn-game').textContent = open ? '← К драфту' : '🎲 Мини-игра';
-  if (open && game.step === -1) renderGame();
+  if (open) renderGame();
 }
 
 async function startGame() {
-  Object.assign(game, { allies: [], enemies: [], step: 0, left: 0, picks: [], result: null, search: '' });
+  Object.assign(game, {
+    phase: 'bans',
+    bans: [],
+    allies: [],
+    enemies: [],
+    enemyPos: {},
+    lanes: {},
+    enemyLanes: {},
+    selected: null,
+    step: -1,
+    left: 0,
+    picks: [],
+    enemyNotes: [],
+    result: null,
+    search: '',
+    busy: true,
+  });
   $('#game-search').value = '';
+  renderGame();
+  for (let i = 0; i < BAN_COUNT; i++) {
+    await sleep(BAN_DELAY_MS);
+    game.bans.push(randomFree());
+    renderGame();
+  }
+  game.phase = 'draft';
+  game.step = 0;
   await runSteps();
 }
 
-// Plays random steps until the player has to choose, or the draft is over.
+// Plays automatic steps until the player has to choose, or the draft is over.
 async function runSteps() {
   game.busy = true;
-  while (game.step < GAME_STEPS.length && GAME_STEPS[game.step].who === 'random') {
+  while (game.step < GAME_STEPS.length && GAME_STEPS[game.step].who !== 'player') {
     const s = GAME_STEPS[game.step];
     renderGame();
     for (let i = 0; i < s.n; i++) {
-      await sleep(RANDOM_PICK_DELAY_MS);
-      game[s.side].push(randomFree());
+      await sleep(PICK_DELAY_MS);
+      if (s.who === 'enemy') enemyPick();
+      else game[s.side].push(randomFree());
       renderGame();
     }
     game.step++;
   }
   game.busy = false;
-  if (game.step >= GAME_STEPS.length) finishGame();
-  else game.left = GAME_STEPS[game.step].n;
+  if (game.step >= GAME_STEPS.length) {
+    game.phase = 'lanes';
+    game.selected = game.allies[0];
+  } else game.left = GAME_STEPS[game.step].n;
   renderGame();
 }
 
@@ -95,6 +186,7 @@ function playerPick(id) {
   const options = Scoring.suggestPicks(state.dataset, {
     allies: game.allies,
     enemies: game.enemies,
+    bans: game.bans,
     limit: 500,
     minGames: minGames(),
   });
@@ -119,10 +211,96 @@ function playerPick(id) {
   runSteps();
 }
 
-// Scores the final draft: every ally against every enemy, plus every pair of allies.
+// ---------- minimap ----------
+
+function placeHero(lane) {
+  if (game.phase !== 'lanes' || !game.selected) return;
+  game.lanes[game.selected] = lane;
+  // Move on to the next hero still without a lane.
+  game.selected = game.allies.find((id) => !game.lanes[id]) || null;
+  renderGame();
+}
+
+async function confirmLanes() {
+  if (game.allies.some((id) => !game.lanes[id])) return;
+  game.busy = true;
+  game.selected = null;
+  for (const id of game.enemies) {
+    const pos = game.enemyPos[id];
+    game.enemyLanes[id] = Object.keys(LANES).find((l) => LANES[l].theirs.includes(pos));
+    await sleep(PICK_DELAY_MS / 2);
+    renderGame();
+  }
+  game.busy = false;
+  finishGame();
+  renderGame();
+}
+
+function mapToken(id, side) {
+  const t = el('div', `map-token ${side}`);
+  t.style.backgroundImage = `url(${imgUrl(state.heroes[id])})`;
+  t.title = heroName(id);
+  t.append(el('span', '', heroName(id).split(' ')[0]));
+  return t;
+}
+
+function minimap() {
+  const wrap = el('div', 'minimap-wrap');
+  const map = el('div', 'minimap');
+  map.setAttribute('role', 'group');
+  map.setAttribute('aria-label', 'Миникарта');
+  map.append(el('div', 'map-river'), el('div', 'map-lane lane-top-h'), el('div', 'map-lane lane-top-v'));
+  map.append(el('div', 'map-lane lane-bot-h'), el('div', 'map-lane lane-bot-v'), el('div', 'map-lane lane-mid'));
+  map.append(el('div', 'map-base radiant'), el('div', 'map-base dire'));
+  for (const [key, lane] of Object.entries(LANES)) {
+    const zone = el('button', `map-zone zone-${key}`);
+    zone.type = 'button';
+    zone.disabled = game.phase !== 'lanes' || game.busy || !game.selected;
+    zone.onclick = () => placeHero(key);
+    zone.append(el('span', 'zone-label', lane.label));
+    const theirs = el('div', 'zone-team');
+    for (const id of game.enemies.filter((x) => game.enemyLanes[x] === key)) theirs.append(mapToken(id, 'enemy'));
+    const mine = el('div', 'zone-team');
+    for (const id of game.allies.filter((x) => game.lanes[x] === key)) mine.append(mapToken(id, 'ally'));
+    zone.append(theirs, mine);
+    map.append(zone);
+  }
+  wrap.append(map);
+
+  if (game.phase === 'lanes') {
+    const side = el('div', 'lane-picker');
+    side.append(el('p', 'game-prompt', game.busy ? 'Соперник расставляет героев…' : 'Выберите героя, затем линию на карте.'));
+    const chips = el('div', 'lane-chips');
+    for (const id of game.allies) {
+      const c = el('button', `lane-chip${game.selected === id ? ' selected' : ''}`);
+      c.type = 'button';
+      c.disabled = game.busy;
+      const lane = game.lanes[id];
+      c.append(el('strong', '', heroName(id)), el('span', 'muted', lane ? LANES[lane].label : 'не выставлен'));
+      c.onclick = () => {
+        game.selected = id;
+        renderGame();
+      };
+      chips.append(c);
+    }
+    const done = el('button', 'primary', 'Готово');
+    done.disabled = game.busy || game.allies.some((id) => !game.lanes[id]);
+    done.onclick = confirmLanes;
+    side.append(
+      chips,
+      el('p', 'hint', 'Обычная расстановка: керри и фул-саппорт внизу, мидер в центре, оффлейнер и софт-саппорт наверху.'),
+      done
+    );
+    wrap.append(side);
+  }
+  return wrap;
+}
+
+// ---------- scoring ----------
+
+// Draft part: every ally against every enemy, plus every pair of allies.
 function scoreDraft(d, allies, enemies) {
   const mg = minGames();
-  const val = (r) => (r ? r.value : 0);
   const heroes = allies.map((a) => {
     const vs = enemies.reduce((s, e) => s + val(Scoring.advantage(d, a, e, mg)), 0);
     const team = allies.filter((x) => x !== a).reduce((s, x) => s + val(Scoring.synergy(d, a, x, mg)), 0);
@@ -135,21 +313,49 @@ function scoreDraft(d, allies, enemies) {
   return { total, heroes };
 }
 
+// Lane part: heroes against the heroes on the same lane, lane partners, and
+// heroes placed on a lane none of their positions fit.
+function scoreLanes(d) {
+  const mg = minGames();
+  return Object.entries(LANES).map(([key, lane]) => {
+    const mine = game.allies.filter((id) => game.lanes[id] === key);
+    const theirs = game.enemies.filter((id) => game.enemyLanes[id] === key);
+    let matchup = 0;
+    for (const a of mine) for (const e of theirs) matchup += val(Scoring.advantage(d, a, e, mg));
+    let partners = 0;
+    for (let i = 0; i < mine.length; i++)
+      for (let j = i + 1; j < mine.length; j++) partners += val(Scoring.laneSynergy(d, mine[i], mine[j], mg));
+    const offRole = mine.filter((id) => !positionsOf(id).some((p) => lane.mine.includes(p)));
+    const total = matchup + partners - offRole.length * OFF_ROLE_PENALTY;
+    return { key, lane, mine, theirs, matchup, partners, offRole, total };
+  });
+}
+
+// The opponent counter-picks, so even a solid draft often ends a little below zero.
 function verdict(p) {
-  if (p >= 100) return 'Отличный драфт';
-  if (p >= 30) return 'Хороший драфт';
-  if (p > -30) return 'Средний драфт';
+  if (p >= 50) return 'Отличный драфт';
+  if (p >= 0) return 'Хороший драфт';
+  if (p > -150) return 'Средний драфт';
   return 'Слабый драфт';
 }
 
+function readRecord() {
+  return recordStore.get();
+}
+
 function finishGame() {
-  const r = scoreDraft(state.dataset, game.allies, game.enemies);
-  const score = points(r.total);
-  const record = recordStore.get();
+  const draft = scoreDraft(state.dataset, game.allies, game.enemies);
+  const lanes = scoreLanes(state.dataset);
+  const laneTotal = lanes.reduce((s, l) => s + l.total, 0);
+  const score = points(draft.total + laneTotal);
+  const record = readRecord();
   const isRecord = record === null || score > record;
   if (isRecord) recordStore.set(score);
-  game.result = { ...r, score, record: isRecord ? score : record, isRecord };
+  game.phase = 'done';
+  game.result = { ...draft, lanes, laneTotal, score, record: isRecord ? score : record, isRecord };
 }
+
+// ---------- rendering ----------
 
 function gameTeam(side, title) {
   const box = el('div', `game-team game-${side}`);
@@ -161,10 +367,26 @@ function gameTeam(side, title) {
     if (id) {
       s.classList.add('filled', 'game-slot');
       s.style.backgroundImage = `url(${imgUrl(state.heroes[id])})`;
-      s.append(el('span', '', heroName(id)));
-      s.title = heroName(id);
+      const pos = side === 'enemies' ? ` · ${POSITION_NAMES[game.enemyPos[id]]}` : '';
+      s.append(el('span', '', heroName(id) + pos));
+      s.title = heroName(id) + pos;
     }
     row.append(s);
+  }
+  box.append(row);
+  return box;
+}
+
+function gameBans() {
+  const box = el('div', 'game-bans');
+  box.append(el('h3', '', `Баны (${game.bans.length}/${BAN_COUNT})`));
+  const row = el('div', 'ban-row');
+  for (const id of game.bans) {
+    const b = el('div', 'ban-chip');
+    b.style.backgroundImage = `url(${imgUrl(state.heroes[id])})`;
+    b.title = heroName(id);
+    b.append(el('span', '', heroName(id)));
+    row.append(b);
   }
   box.append(row);
   return box;
@@ -187,10 +409,11 @@ function gameGrid() {
       const c = el('button', 'hero');
       c.type = 'button';
       c.style.backgroundImage = `url(${imgUrl(h)})`;
-      c.title = h.localized;
+      c.title = `${h.localized}: ${positionsOf(h.id).map((p) => POSITION_NAMES[p]).join(', ')}`;
       c.append(el('span', '', h.localized));
       if (game.allies.includes(h.id)) c.classList.add('ally');
       else if (game.enemies.includes(h.id)) c.classList.add('enemy');
+      else if (game.bans.includes(h.id)) c.classList.add('banned');
       c.disabled = taken.has(h.id) || game.busy;
       c.onclick = () => playerPick(h.id);
       grid.append(c);
@@ -206,12 +429,24 @@ function gameResults() {
   const head = el('div', 'game-score');
   head.append(
     el('div', `game-points ${r.score >= 0 ? 'pos' : 'neg'}`, `${signed(r.score)} очков`),
-    el('div', '', verdict(r.score)),
+    el('div', '', `${verdict(r.score)} · драфт ${signed(points(r.total))}, линии ${signed(points(r.laneTotal))}`),
     el('div', 'muted', r.isRecord ? 'Новый рекорд!' : `Рекорд: ${signed(r.record)}`)
   );
   box.append(head);
 
-  box.append(el('h4', '', 'Вклад героев вашей команды'));
+  box.append(el('h4', '', 'Линии'));
+  const lanes = el('ul', 'game-picks');
+  for (const l of r.lanes) {
+    const mine = l.mine.map(heroName).join(', ') || 'никого';
+    const theirs = l.theirs.map(heroName).join(', ') || 'никого';
+    const parts = [`${l.lane.label}: ${mine} против ${theirs}, ${signed(points(l.total))}`];
+    if (l.partners) parts.push(`пара на линии ${pct(l.partners)}`);
+    if (l.offRole.length) parts.push(`не на своей позиции: ${l.offRole.map(heroName).join(', ')} (−${points(OFF_ROLE_PENALTY)} за каждого)`);
+    lanes.append(el('li', '', parts.join('; ') + '.'));
+  }
+  box.append(lanes);
+
+  box.append(el('h4', '', 'Вклад героев вашей команды в драфт'));
   const ol = el('ol', 'list');
   for (const h of r.heroes) {
     const li = el('li');
@@ -238,10 +473,54 @@ function gameResults() {
     ul.append(el('li', '', text));
   }
   box.append(ul);
+
+  box.append(el('h4', '', 'Пики соперника'));
+  const en = el('ul', 'game-picks');
+  for (const n of game.enemyNotes) en.append(el('li', '', n.text));
+  box.append(en);
+
   if (!state.dataset.with)
     box.append(el('p', 'hint', 'Синергия союзников не учтена: для неё нужен токен STRATZ (⚙). Сейчас очки считаются только по контрпикам.'));
-  box.append(el('p', 'hint', 'Очки: сумма преимуществ каждого вашего героя против каждого врага и синергии каждой пары союзников по статистике матчей, 1 очко = 0,1%.'));
+  box.append(
+    el(
+      'p',
+      'hint',
+      'Очки: преимущество каждого вашего героя над каждым врагом и синергия союзников (драфт), плюс противостояния на линиях, пары на линии и штраф за героя не на своей позиции (линии). 1 очко = 0,1%.'
+    )
+  );
   return box;
+}
+
+function gameStatus() {
+  const status = el('div', 'game-status');
+  const s = GAME_STEPS[game.step];
+  if (game.phase === 'idle') {
+    status.append(
+      el(
+        'p',
+        '',
+        `Сначала банятся ${BAN_COUNT} случайных героев. Союзник выбирает случайного героя, вы выбираете четырёх, а соперник подбирает контрпики к вашим героям так, чтобы закрыть все пять позиций. В конце обе команды расставляют героев по линиям.`
+      )
+    );
+  } else if (game.phase === 'bans') {
+    status.append(el('p', 'game-prompt', 'Баним случайных героев…'));
+  } else if (game.phase === 'draft') {
+    const steps = el('ol', 'game-steps');
+    GAME_STEPS.forEach((x, i) => {
+      const label = x.who === 'player' ? `Вы ×${x.n}` : x.side === 'allies' ? 'Союзник' : `Соперник ×${x.n}`;
+      steps.append(el('li', i < game.step ? 'done' : i === game.step ? 'now' : '', label));
+    });
+    status.append(steps, el('p', 'game-prompt', s.who === 'player' && s.n > 1 ? `${s.text} (осталось ${game.left})` : s.text));
+  } else if (game.phase === 'lanes') {
+    status.append(el('p', 'game-prompt', 'Драфт закончен. Расставьте своих героев по линиям.'));
+  } else {
+    status.append(el('p', '', 'Игра завершена.'));
+  }
+  const start = el('button', 'primary', game.phase === 'idle' ? 'Начать игру' : 'Новая игра');
+  start.disabled = game.busy;
+  start.onclick = startGame;
+  status.append(start);
+  return status;
 }
 
 function renderGame() {
@@ -250,36 +529,22 @@ function renderGame() {
   root.replaceChildren();
   if (!state.dataset) {
     root.append(el('p', 'muted', 'Для игры нужна статистика матчей. Нажмите ⟳ вверху и дождитесь загрузки.'));
+    $('#game-search').classList.add('hidden');
     return;
   }
-  const s = GAME_STEPS[game.step];
-  const status = el('div', 'game-status');
-  if (game.step === -1) {
-    status.append(el('p', '', 'Союзник и противники выбирают героев случайно, вы выбираете четырёх героев в свою команду. В конце драфт оценивается по статистике.'));
-  } else if (game.result) {
-    status.append(el('p', '', 'Драфт завершён.'));
-  } else {
-    const steps = el('ol', 'game-steps');
-    GAME_STEPS.forEach((x, i) => {
-      const li = el('li', i < game.step ? 'done' : i === game.step ? 'now' : '', x.who === 'player' ? `Вы ×${x.n}` : x.side === 'allies' ? 'Союзник' : `Враги ×${x.n}`);
-      steps.append(li);
-    });
-    status.append(steps, el('p', 'game-prompt', s.who === 'player' && s.n > 1 ? `${s.text} (осталось ${game.left})` : s.text));
+  root.append(gameStatus());
+  if (game.phase !== 'idle') {
+    root.append(gameBans());
+    const teams = el('div', 'game-teams');
+    teams.append(gameTeam('allies', 'Ваша команда'), gameTeam('enemies', 'Соперник'));
+    root.append(teams);
   }
-  const start = el('button', 'primary', game.step === -1 ? 'Начать игру' : 'Новая игра');
-  start.disabled = game.busy;
-  start.onclick = startGame;
-  status.append(start);
-  root.append(status);
-
-  const teams = el('div', 'game-teams');
-  teams.append(gameTeam('allies', 'Ваша команда'), gameTeam('enemies', 'Противники'));
-  root.append(teams);
-
-  const choosing = !game.result && s && s.who === 'player';
+  const s = GAME_STEPS[game.step];
+  const choosing = game.phase === 'draft' && s && s.who === 'player';
   $('#game-search').classList.toggle('hidden', !choosing);
-  if (game.result) root.append(gameResults());
-  else if (choosing) root.append(gameGrid());
+  if (choosing) root.append(gameGrid());
+  if (game.phase === 'lanes' || game.phase === 'done') root.append(minimap());
+  if (game.phase === 'done') root.append(gameResults());
 }
 
 function initGame() {
