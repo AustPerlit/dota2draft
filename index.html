@@ -1472,7 +1472,8 @@ init();
 /* global Scoring, DraftData, state, $, el, imgUrl, heroName, pct, minGames, ATTRIBUTES */
 // Draft challenge mini-game. Twelve random bans, then an ally picks at random
 // (or the player, if that option is off), the player fills the other slots and
-// the opponent counter-picks while covering the five standard positions. In the
+// the opponent picks at the same time: blind meta picks first, then counters to
+// the player's heroes from earlier phases, covering the five standard positions. In the
 // last-pick mode both teams start with four heroes and the player picks the
 // fifth. At the end both sides place their heroes on the minimap, and the draft
 // and the lanes are scored from match statistics.
@@ -1483,11 +1484,11 @@ const FIRST_RANDOM = { side: 'allies', who: 'random', n: 1, text: 'Союзни�
 const FIRST_PLAYER = { side: 'allies', who: 'player', n: 1, text: 'Ваш ход: выберите первого героя' };
 const FULL_STEPS = [
   { side: 'allies', who: 'player', n: 1, text: 'Ваш ход: выберите героя' },
-  { side: 'enemies', who: 'enemy', n: 2, text: 'Соперник выбирает двух героев' },
+  { side: 'enemies', who: 'enemy', n: 2, sees: 0, text: 'Соперник выбирает двух героев' },
   { side: 'allies', who: 'player', n: 2, text: 'Ваш ход: выберите двух героев' },
-  { side: 'enemies', who: 'enemy', n: 2, text: 'Соперник выбирает ещё двух героев' },
+  { side: 'enemies', who: 'enemy', n: 2, sees: 2, text: 'Соперник выбирает ещё двух героев' },
   { side: 'allies', who: 'player', n: 1, text: 'Последний ход: выберите заключительного героя' },
-  { side: 'enemies', who: 'enemy', n: 1, text: 'Соперник делает последний выбор' },
+  { side: 'enemies', who: 'enemy', n: 1, sees: 4, text: 'Соперник делает последний выбор' },
 ];
 const LAST_PICK_STEPS = [
   { side: 'allies', who: 'preset', n: 4, text: 'Собираем вашу команду' },
@@ -1571,25 +1572,31 @@ function openEnemyPositions() {
 
 // The opponent takes a hero that is strong against your picks and fits one of
 // its still-open positions, picking among the top few so games differ.
-function enemyPick() {
+// The opponent picks at the same time as the player, so it only knows the
+// player's heroes from earlier phases: `sees` of them. With none known it
+// takes a strong meta hero for an open position.
+function enemyPick(sees) {
   const open = openEnemyPositions();
   const mg = minGames();
+  const seen = game.allies.slice(0, sees);
   const options = [];
   for (const id of freeHeroes()) {
     const pos = positionsOf(id).find((p) => open.includes(p));
     if (!pos) continue;
-    const counter = game.allies.reduce((s, a) => s + val(Scoring.advantage(state.dataset, id, a, mg)), 0);
+    const counter = seen.reduce((s, a) => s + val(Scoring.advantage(state.dataset, id, a, mg)), 0);
     const team = game.enemies.reduce((s, e) => s + val(Scoring.synergy(state.dataset, id, e, mg)), 0);
     // Prefer heroes for whom the open position is their main one.
     const main = positionsOf(id)[0] === pos ? 0.005 : 0;
-    options.push({ id, pos, counter, score: counter + team / 2 + main });
+    const wr = state.dataset.heroes[id].winrate;
+    const meta = wr ? wr - 0.5 : 0;
+    options.push({ id, pos, counter, meta: wr, score: counter + team / 2 + main + meta });
   }
   options.sort((a, b) => b.score - a.score);
-  const top = options.slice(0, 3);
+  const top = options.slice(0, seen.length ? 3 : 5);
   const choice = top[Math.floor(Math.random() * top.length)];
   game.enemies.push(choice.id);
   game.enemyPos[choice.id] = choice.pos;
-  const best = game.allies
+  const best = seen
     .map((a) => ({ a, v: val(Scoring.advantage(state.dataset, choice.id, a, mg)) }))
     .sort((x, y) => y.v - x.v)[0];
   game.enemyNotes.push({
@@ -1598,7 +1605,9 @@ function enemyPick() {
     text:
       best && best.v > 0
         ? `${heroName(choice.id)} (${POSITION_NAMES[choice.pos]}): сильнее всего против ${heroName(best.a)} (${pct(best.v)}).`
-        : `${heroName(choice.id)} (${POSITION_NAMES[choice.pos]}): закрывает позицию.`,
+        : seen.length || !choice.meta
+          ? `${heroName(choice.id)} (${POSITION_NAMES[choice.pos]}): закрывает позицию.`
+          : `${heroName(choice.id)} (${POSITION_NAMES[choice.pos]}): сильный герой меты, ${pct(choice.meta - 0.5)} к винрейту, выбран вслепую.`,
   });
 }
 
@@ -1650,7 +1659,7 @@ async function runSteps() {
     renderGame();
     for (let i = 0; i < s.n; i++) {
       await sleep(s.who === 'preset' ? PICK_DELAY_MS / 3 : PICK_DELAY_MS);
-      if (s.who === 'enemy') enemyPick();
+      if (s.who === 'enemy') enemyPick(s.sees);
       else if (s.who === 'preset') presetPick(s.side);
       else game[s.side].push(randomFree());
       renderGame();
@@ -2033,7 +2042,7 @@ function gameStatus() {
         '',
         game.mode === 'lastpick'
           ? `Сначала банятся ${BAN_COUNT} случайных героев, затем в обеих командах уже стоят по 4 героя на разных позициях. Вам нужно сделать ластпик: выбрать пятого героя. В конце обе команды расставляют героев по линиям.`
-          : `Сначала банятся ${BAN_COUNT} случайных героев. ${game.randomFirst ? 'Союзник выбирает случайного героя, вы выбираете четырёх' : 'Вы выбираете всех пятерых героев'}, а соперник подбирает контрпики к вашим героям так, чтобы закрыть все пять позиций. В конце обе команды расставляют героев по линиям.`
+          : `Сначала банятся ${BAN_COUNT} случайных героев. ${game.randomFirst ? 'Союзник выбирает случайного героя, вы выбираете четырёх' : 'Вы выбираете всех пятерых героев'}, а соперник выбирает одновременно с вами: первые два героя у него метовые, вслепую, дальше он контрит только тех ваших героев, что были выбраны в прошлых фазах, и закрывает все пять позиций. В конце обе команды расставляют героев по линиям.`
       )
     );
   } else if (game.phase === 'bans') {
