@@ -94,7 +94,9 @@ h4 { margin: 10px 0 6px; }
 .bans .slot.filled { filter: grayscale(1); }
 .wide { width: 100%; margin-top: 12px; }
 
-#search { width: 100%; margin-bottom: 8px; padding: 7px 10px; }
+#search { flex: 1; min-width: 0; padding: 7px 10px; }
+.search-row { display: flex; gap: 6px; margin-bottom: 8px; }
+#btn-compare { white-space: nowrap; border-color: var(--accent); color: var(--accent); }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 4px; }
 .hero {
   position: relative;
@@ -175,6 +177,7 @@ dialog input[type=range] { width: 100%; }
 .cmp-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .cmp-head h4 { margin: 0; }
 #compare-banner button { margin-left: 8px; padding: 2px 8px; }
+.list li.muted { display: block; }
 
 </style>
 <header class="titlebar">
@@ -187,7 +190,7 @@ dialog input[type=range] { width: 100%; }
 </header>
 
 <div id="warning" class="banner warn hidden"></div>
-<div id="compare-banner" class="banner hidden">Сравнение с <strong id="compare-hero"></strong>: выберите второго героя. <button id="compare-cancel">Отмена</button></div>
+<div id="compare-banner" class="banner hidden"><span id="compare-text"></span> <button id="compare-cancel">Отмена</button></div>
 
 <main class="layout">
   <section class="board">
@@ -203,11 +206,14 @@ dialog input[type=range] { width: 100%; }
     <h3>Баны</h3>
     <div id="slots-bans" class="slots bans"></div>
     <button id="btn-reset" class="wide">Очистить драфт</button>
-    <p class="hint">Клик по герою добавляет его в выбранную группу, правый клик открывает карточку. Клик по слоту убирает героя. В поиске Enter добавляет первого найденного, Tab переключает группу. Shift+клик по двум героям открывает их сравнение.</p>
+    <p class="hint">Клик по герою добавляет его в выбранную группу, правый клик открывает карточку. Клик по слоту убирает героя. В поиске Enter добавляет первого найденного, Tab переключает группу. Кнопка «⇄ Сравнить» (или Shift+клик по двум героям) открывает сравнение пары.</p>
   </section>
 
   <section class="pool">
-    <input id="search" type="search" placeholder="Поиск героя…" autocomplete="off" aria-label="Поиск героя">
+    <div class="search-row">
+      <input id="search" type="search" placeholder="Поиск героя…" autocomplete="off" aria-label="Поиск героя">
+      <button id="btn-compare" title="Сравнить двух героев">⇄ Сравнить</button>
+    </div>
     <div id="grid" class="grid"></div>
   </section>
 
@@ -753,7 +759,7 @@ function renderGrid() {
     else if (taken.has(h.id)) c.classList.add('taken');
     c.append(el('span', '', h.localized));
     c.onclick = (e) => {
-      if (e.shiftKey && !state.compareFrom) startCompare(h.id);
+      if (e.shiftKey && !state.comparing) startCompare(h.id);
       else addToDraft(h.id);
       clearSearch();
     };
@@ -893,23 +899,35 @@ function render() {
 
 // ---------- comparing two heroes ----------
 
+// Without an id the first hero is still to be chosen.
 function startCompare(id) {
-  state.compareFrom = id;
-  $('#compare-hero').textContent = heroName(id);
+  state.comparing = true;
+  state.compareFrom = id || null;
+  $('#compare-text').textContent = id
+    ? `Сравнение с ${heroName(id)}: выберите второго героя.`
+    : 'Сравнение: выберите первого героя.';
   $('#compare-banner').classList.remove('hidden');
+  $('#btn-compare').textContent = '✕ Отменить';
   $('#search').focus();
 }
 
 function cancelCompare() {
+  state.comparing = false;
   state.compareFrom = null;
   $('#compare-banner').classList.add('hidden');
+  $('#btn-compare').textContent = '⇄ Сравнить';
 }
 
-// In comparison mode the next chosen hero opens the comparison instead of
-// its usual action. Returns true when it did.
+// In comparison mode a chosen hero becomes part of the pair instead of
+// getting its usual action. Returns true when it did.
 function finishCompare(id) {
+  if (!state.comparing) return false;
   const from = state.compareFrom;
-  if (!from || from === id) return false;
+  if (!from) {
+    startCompare(id);
+    return true;
+  }
+  if (from === id) return true;
   cancelCompare();
   openCompare(from, id);
   return true;
@@ -1094,6 +1112,7 @@ async function init() {
   };
   $('#s-save').onclick = saveSettings;
   $('#compare-cancel').onclick = cancelCompare;
+  $('#btn-compare').onclick = () => (state.comparing ? cancelCompare() : startCompare());
   $('#compare-close').onclick = () => $('#compare').close();
   sel.onchange = changeBracket;
   $('#role').onchange = (e) => {
@@ -1115,7 +1134,7 @@ async function init() {
       clearSearch();
       e.preventDefault();
     } else if (e.key === 'Escape') {
-      if (state.compareFrom) cancelCompare();
+      if (state.comparing) cancelCompare();
       clearSearch();
     }
   };

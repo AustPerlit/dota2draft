@@ -92,7 +92,9 @@ h4 { margin: 10px 0 6px; }
 .bans .slot.filled { filter: grayscale(1); }
 .wide { width: 100%; margin-top: 12px; }
 
-#search { width: 100%; margin-bottom: 8px; padding: 7px 10px; }
+#search { flex: 1; min-width: 0; padding: 7px 10px; }
+.search-row { display: flex; gap: 6px; margin-bottom: 8px; }
+#btn-compare { white-space: nowrap; border-color: var(--accent); color: var(--accent); }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 4px; }
 .hero {
   position: relative;
@@ -173,3 +175,4 @@ dialog input[type=range] { width: 100%; }
 .cmp-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .cmp-head h4 { margin: 0; }
 #compare-banner button { margin-left: 8px; padding: 2px 8px; }
+.list li.muted { display: block; }

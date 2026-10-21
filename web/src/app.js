@@ -141,7 +141,7 @@ function renderGrid() {
     else if (taken.has(h.id)) c.classList.add('taken');
     c.append(el('span', '', h.localized));
     c.onclick = (e) => {
-      if (e.shiftKey && !state.compareFrom) startCompare(h.id);
+      if (e.shiftKey && !state.comparing) startCompare(h.id);
       else addToDraft(h.id);
       clearSearch();
     };
@@ -281,23 +281,35 @@ function render() {
 
 // ---------- comparing two heroes ----------
 
+// Without an id the first hero is still to be chosen.
 function startCompare(id) {
-  state.compareFrom = id;
-  $('#compare-hero').textContent = heroName(id);
+  state.comparing = true;
+  state.compareFrom = id || null;
+  $('#compare-text').textContent = id
+    ? `Сравнение с ${heroName(id)}: выберите второго героя.`
+    : 'Сравнение: выберите первого героя.';
   $('#compare-banner').classList.remove('hidden');
+  $('#btn-compare').textContent = '✕ Отменить';
   $('#search').focus();
 }
 
 function cancelCompare() {
+  state.comparing = false;
   state.compareFrom = null;
   $('#compare-banner').classList.add('hidden');
+  $('#btn-compare').textContent = '⇄ Сравнить';
 }
 
-// In comparison mode the next chosen hero opens the comparison instead of
-// its usual action. Returns true when it did.
+// In comparison mode a chosen hero becomes part of the pair instead of
+// getting its usual action. Returns true when it did.
 function finishCompare(id) {
+  if (!state.comparing) return false;
   const from = state.compareFrom;
-  if (!from || from === id) return false;
+  if (!from) {
+    startCompare(id);
+    return true;
+  }
+  if (from === id) return true;
   cancelCompare();
   openCompare(from, id);
   return true;
@@ -482,6 +494,7 @@ async function init() {
   };
   $('#s-save').onclick = saveSettings;
   $('#compare-cancel').onclick = cancelCompare;
+  $('#btn-compare').onclick = () => (state.comparing ? cancelCompare() : startCompare());
   $('#compare-close').onclick = () => $('#compare').close();
   sel.onchange = changeBracket;
   $('#role').onchange = (e) => {
@@ -503,7 +516,7 @@ async function init() {
       clearSearch();
       e.preventDefault();
     } else if (e.key === 'Escape') {
-      if (state.compareFrom) cancelCompare();
+      if (state.comparing) cancelCompare();
       clearSearch();
     }
   };

@@ -21,6 +21,7 @@
 
   <div id="ct-banner" class="banner hidden">Режим «сквозь окно»: клики проходят в игру. Нажмите горячую клавишу, чтобы вернуть управление.</div>
   <div id="warning" class="banner warn hidden"></div>
+  <div id="compare-banner" class="banner hidden"><span id="compare-text"></span> <button id="compare-cancel">Отмена</button></div>
 
   <main class="layout">
     <section class="board">
@@ -36,11 +37,14 @@
       <h3>Баны</h3>
       <div id="slots-bans" class="slots bans"></div>
       <button id="btn-reset" class="wide">Очистить драфт</button>
-      <p class="hint">Клик по герою добавляет его в выбранную группу, правый клик открывает карточку. Клик по слоту убирает героя. В поиске Enter добавляет первого найденного.</p>
+      <p class="hint">Клик по герою добавляет его в выбранную группу, правый клик открывает карточку. Клик по слоту убирает героя. В поиске Enter добавляет первого найденного. Кнопка «⇄ Сравнить» (или Shift+клик по двум героям) открывает сравнение пары.</p>
     </section>
 
     <section class="pool">
-      <input id="search" type="search" placeholder="Поиск героя…" autocomplete="off">
+      <div class="search-row">
+        <input id="search" type="search" placeholder="Поиск героя…" autocomplete="off">
+        <button id="btn-compare" title="Сравнить двух героев">⇄ Сравнить</button>
+      </div>
       <div id="grid" class="grid"></div>
     </section>
 
@@ -87,6 +91,11 @@
         <button id="s-save" value="default" class="primary">Сохранить</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="compare" aria-label="Сравнение героев">
+    <div id="compare-body"></div>
+    <div class="row end"><button id="compare-close" class="primary">Закрыть</button></div>
   </dialog>
 
   <script src="../src/scoring.js"></script>
