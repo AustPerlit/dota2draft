@@ -476,6 +476,7 @@ function applyDataset(dataset) {
   setStatus(datasetStatus());
   showWarning(dataset && dataset.warning);
   render();
+  if (typeof renderGame === 'function') renderGame();
 }
 
 async function refresh() {

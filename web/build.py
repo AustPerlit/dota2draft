@@ -22,6 +22,7 @@ parts = {
     '/*ABILITY_ANALYSIS*/': (src / 'abilities.js').read_text(encoding='utf-8'),
     '/*DATA*/': (src / 'data.js').read_text(encoding='utf-8'),
     '/*APP*/': (src / 'app.js').read_text(encoding='utf-8'),
+    '/*GAME*/': (src / 'game.js').read_text(encoding='utf-8'),
 }
 for k, v in parts.items():
     page = page.replace(k, v)

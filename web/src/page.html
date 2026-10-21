@@ -6,6 +6,7 @@
   <div class="brand">Dota 2 Draft Helper</div>
   <div id="status" class="status">Загрузка…</div>
   <div class="spacer"></div>
+  <button id="btn-game" title="Мини-игра: соберите драфт на очки">🎲 Мини-игра</button>
   <select id="bracket" title="Ранг" aria-label="Ранг"></select>
   <button id="btn-refresh" title="Обновить статистику" aria-label="Обновить статистику">⟳</button>
   <button id="btn-settings" title="Настройки" aria-label="Настройки">⚙</button>
@@ -66,6 +67,12 @@
   </section>
 </main>
 
+<section id="game" class="game hidden" aria-label="Мини-игра">
+  <h2>Драфт-челлендж</h2>
+  <input id="game-search" class="hidden" type="search" placeholder="Поиск героя… (Enter выбирает первого)" autocomplete="off" aria-label="Поиск героя">
+  <div id="game-body"></div>
+</section>
+
 <dialog id="settings">
   <form method="dialog">
     <h3>Настройки</h3>
@@ -101,3 +108,7 @@
 <script>
 /*APP*/
 </script>
+<script>
+/*GAME*/
+</script>
+<script>initGame();</script>
