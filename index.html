@@ -12,6 +12,10 @@
   --enemy: #d9534f;
   --ban: #7d8597;
   --accent: #e0a526;
+  --str: #e0533f;
+  --agi: #3fbf6a;
+  --int: #3fa6e0;
+  --all: #c58bf0;
   --good: #5fd08f;
   --bad: #ef6b67;
 }
@@ -164,7 +168,7 @@ dialog input[type=range] { width: 100%; }
   .board, .pool, .side { overflow: visible; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
   .pool { order: 2; }
   .side { order: 3; }
-  .grid { max-height: 50vh; overflow: auto; }
+  .groups { max-height: 60vh; overflow: auto; }
 }
 
 #compare { width: min(520px, calc(100vw - 32px)); }
@@ -178,6 +182,18 @@ dialog input[type=range] { width: 100%; }
 .cmp-head h4 { margin: 0; }
 #compare-banner button { margin-left: 8px; padding: 2px 8px; }
 .list li.muted { display: block; }
+
+.attr-head { display: flex; align-items: center; gap: 6px; margin: 10px 0 6px; }
+.groups > .attr-head:first-child { margin-top: 0; }
+.attr-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.attr-str .attr-dot { background: var(--str); }
+.attr-agi .attr-dot { background: var(--agi); }
+.attr-int .attr-dot { background: var(--int); }
+.attr-all .attr-dot { background: var(--all); }
+.attr-str { color: var(--str); }
+.attr-agi { color: var(--agi); }
+.attr-int { color: var(--int); }
+.attr-all { color: var(--all); }
 
 </style>
 <header class="titlebar">
@@ -214,7 +230,7 @@ dialog input[type=range] { width: 100%; }
       <input id="search" type="search" placeholder="Поиск героя…" autocomplete="off" aria-label="Поиск героя">
       <button id="btn-compare" title="Сравнить двух героев">⇄ Сравнить</button>
     </div>
-    <div id="grid" class="grid"></div>
+    <div id="grid" class="groups"></div>
   </section>
 
   <section class="side">
@@ -495,6 +511,7 @@ dialog input[type=range] { width: 100%; }
         id: s.id,
         name: s.name.replace('npc_dota_hero_', ''),
         localized: s.localized_name,
+        attr: s.primary_attr,
         roles: s.roles,
         img: s.img.replace(/\?$/, ''),
         icon: s.icon.replace(/\?$/, ''),
@@ -746,28 +763,49 @@ function filteredHeroes() {
     .sort((a, b) => a.localized.localeCompare(b.localized));
 }
 
+const ATTRIBUTES = [
+  ['str', 'Сила'],
+  ['agi', 'Ловкость'],
+  ['int', 'Интеллект'],
+  ['all', 'Универсальные'],
+];
+
+function heroTile(h, taken) {
+  const c = el('div', 'hero');
+  c.style.backgroundImage = `url(${imgUrl(h)})`;
+  c.title = h.localized;
+  if (state.draft.allies.includes(h.id)) c.classList.add('ally');
+  else if (state.draft.enemies.includes(h.id)) c.classList.add('enemy');
+  else if (taken.has(h.id)) c.classList.add('taken');
+  c.append(el('span', '', h.localized));
+  c.onclick = (e) => {
+    if (e.shiftKey && !state.comparing) startCompare(h.id);
+    else addToDraft(h.id);
+    clearSearch();
+  };
+  c.oncontextmenu = (e) => {
+    e.preventDefault();
+    openHero(h.id);
+  };
+  return c;
+}
+
+// Heroes grouped by primary attribute, the way the in-game hero grid is.
 function renderGrid() {
-  const grid = $('#grid');
-  grid.replaceChildren();
+  const box = $('#grid');
+  box.replaceChildren();
   const taken = allTaken();
-  for (const h of filteredHeroes()) {
-    const c = el('div', 'hero');
-    c.style.backgroundImage = `url(${imgUrl(h)})`;
-    c.title = h.localized;
-    if (state.draft.allies.includes(h.id)) c.classList.add('ally');
-    else if (state.draft.enemies.includes(h.id)) c.classList.add('enemy');
-    else if (taken.has(h.id)) c.classList.add('taken');
-    c.append(el('span', '', h.localized));
-    c.onclick = (e) => {
-      if (e.shiftKey && !state.comparing) startCompare(h.id);
-      else addToDraft(h.id);
-      clearSearch();
-    };
-    c.oncontextmenu = (e) => {
-      e.preventDefault();
-      openHero(h.id);
-    };
-    grid.append(c);
+  const heroes = filteredHeroes();
+  const known = new Set(ATTRIBUTES.map(([key]) => key));
+  const groups = [...ATTRIBUTES, ['other', 'Другие']];
+  for (const [key, label] of groups) {
+    const list = heroes.filter((h) => (key === 'other' ? !known.has(h.attr) : h.attr === key));
+    if (!list.length) continue;
+    const head = el('h3', `attr-head attr-${key}`);
+    head.append(el('span', 'attr-dot'), el('span', '', label), el('span', 'muted', ` ${list.length}`));
+    const grid = el('div', 'grid');
+    for (const h of list) grid.append(heroTile(h, taken));
+    box.append(head, grid);
   }
 }
 
@@ -849,7 +887,8 @@ function renderHeroCard() {
   img.alt = '';
   img.onerror = () => (img.style.visibility = 'hidden');
   const info = el('div');
-  info.append(el('h3', '', h.localized), el('div', 'muted', (h.roles || []).join(', ')));
+  const attr = (ATTRIBUTES.find(([key]) => key === h.attr) || [])[1];
+  info.append(el('h3', '', h.localized), el('div', 'muted', [attr, ...(h.roles || [])].filter(Boolean).join(', ')));
   if (state.dataset) {
     info.append(el('div', 'muted', `Винрейт: ${(Scoring.baseWinrate(state.dataset, id) * 100).toFixed(1)}%`));
   }

@@ -70,6 +70,7 @@
         id: s.id,
         name: s.name.replace('npc_dota_hero_', ''),
         localized: s.localized_name,
+        attr: s.primary_attr,
         roles: s.roles,
         img: s.img.replace(/\?$/, ''),
         icon: s.icon.replace(/\?$/, ''),

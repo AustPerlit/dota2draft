@@ -106,28 +106,49 @@ function filteredHeroes() {
     .sort((a, b) => a.localized.localeCompare(b.localized));
 }
 
+const ATTRIBUTES = [
+  ['str', 'Сила'],
+  ['agi', 'Ловкость'],
+  ['int', 'Интеллект'],
+  ['all', 'Универсальные'],
+];
+
+function heroTile(h, taken) {
+  const c = el('div', 'hero');
+  c.style.backgroundImage = `url(${imgUrl(h)})`;
+  c.title = h.localized;
+  if (state.draft.allies.includes(h.id)) c.classList.add('ally');
+  else if (state.draft.enemies.includes(h.id)) c.classList.add('enemy');
+  else if (taken.has(h.id)) c.classList.add('taken');
+  c.append(el('span', '', h.localized));
+  c.onclick = (e) => {
+    if (e.shiftKey && !state.comparing) startCompare(h.id);
+    else addToDraft(h.id);
+    clearSearch();
+  };
+  c.oncontextmenu = (e) => {
+    e.preventDefault();
+    openHero(h.id);
+  };
+  return c;
+}
+
+// Heroes grouped by primary attribute, the way the in-game hero grid is.
 function renderGrid() {
-  const grid = $('#grid');
-  grid.replaceChildren();
+  const box = $('#grid');
+  box.replaceChildren();
   const taken = allTaken();
-  for (const h of filteredHeroes()) {
-    const c = el('div', 'hero');
-    c.style.backgroundImage = `url(${imgUrl(h)})`;
-    c.title = h.localized;
-    if (state.draft.allies.includes(h.id)) c.classList.add('ally');
-    else if (state.draft.enemies.includes(h.id)) c.classList.add('enemy');
-    else if (taken.has(h.id)) c.classList.add('taken');
-    c.append(el('span', '', h.localized));
-    c.onclick = (e) => {
-      if (e.shiftKey && !state.comparing) startCompare(h.id);
-      else addToDraft(h.id);
-      clearSearch();
-    };
-    c.oncontextmenu = (e) => {
-      e.preventDefault();
-      openHero(h.id);
-    };
-    grid.append(c);
+  const heroes = filteredHeroes();
+  const known = new Set(ATTRIBUTES.map(([key]) => key));
+  const groups = [...ATTRIBUTES, ['other', 'Другие']];
+  for (const [key, label] of groups) {
+    const list = heroes.filter((h) => (key === 'other' ? !known.has(h.attr) : h.attr === key));
+    if (!list.length) continue;
+    const head = el('h3', `attr-head attr-${key}`);
+    head.append(el('span', 'attr-dot'), el('span', '', label), el('span', 'muted', ` ${list.length}`));
+    const grid = el('div', 'grid');
+    for (const h of list) grid.append(heroTile(h, taken));
+    box.append(head, grid);
   }
 }
 
@@ -209,7 +230,8 @@ function renderHeroCard() {
   img.alt = '';
   img.onerror = () => (img.style.visibility = 'hidden');
   const info = el('div');
-  info.append(el('h3', '', h.localized), el('div', 'muted', (h.roles || []).join(', ')));
+  const attr = (ATTRIBUTES.find(([key]) => key === h.attr) || [])[1];
+  info.append(el('h3', '', h.localized), el('div', 'muted', [attr, ...(h.roles || [])].filter(Boolean).join(', ')));
   if (state.dataset) {
     info.append(el('div', 'muted', `Винрейт: ${(Scoring.baseWinrate(state.dataset, id) * 100).toFixed(1)}%`));
   }

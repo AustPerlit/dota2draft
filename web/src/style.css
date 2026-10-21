@@ -10,6 +10,10 @@
   --enemy: #d9534f;
   --ban: #7d8597;
   --accent: #e0a526;
+  --str: #e0533f;
+  --agi: #3fbf6a;
+  --int: #3fa6e0;
+  --all: #c58bf0;
   --good: #5fd08f;
   --bad: #ef6b67;
 }
@@ -162,7 +166,7 @@ dialog input[type=range] { width: 100%; }
   .board, .pool, .side { overflow: visible; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
   .pool { order: 2; }
   .side { order: 3; }
-  .grid { max-height: 50vh; overflow: auto; }
+  .groups { max-height: 60vh; overflow: auto; }
 }
 
 #compare { width: min(520px, calc(100vw - 32px)); }
@@ -176,3 +180,15 @@ dialog input[type=range] { width: 100%; }
 .cmp-head h4 { margin: 0; }
 #compare-banner button { margin-left: 8px; padding: 2px 8px; }
 .list li.muted { display: block; }
+
+.attr-head { display: flex; align-items: center; gap: 6px; margin: 10px 0 6px; }
+.groups > .attr-head:first-child { margin-top: 0; }
+.attr-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.attr-str .attr-dot { background: var(--str); }
+.attr-agi .attr-dot { background: var(--agi); }
+.attr-int .attr-dot { background: var(--int); }
+.attr-all .attr-dot { background: var(--all); }
+.attr-str { color: var(--str); }
+.attr-agi { color: var(--agi); }
+.attr-int { color: var(--int); }
+.attr-all { color: var(--all); }
